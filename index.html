@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="data:,">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room of Otto</title>
+    <style>
+        /* Basic styles */
+        body { margin: 0; font-family: Arial, sans-serif; overflow: hidden; }
+        canvas { display: block; }
+
+        /* Chat Box Styling */
+        #chatBox {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px; /* Default width for larger screens */
+            max-width: 90%; /* Ensure it doesn't get too large on mobile */
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: white;
+            font-family: Arial;
+            z-index: 1;
+            box-sizing: border-box;
+        }
+
+        /* Full screen chat box */
+        #chatBox.fullScreen {
+            top: 20pt;
+            bottom: 10%;
+            position: fixed;   /* Fixed positioning to cover the entire screen */
+            width: 100vw;        /* Full width of the screen */
+            height: 93.5%;       /* Full height of the screen */
+            padding: 30px;      /* Padding inside the chat box */
+            box-sizing: border-box;  /* Include padding in width/height calculation */
+            display: flex;      /* Use flex to align items */
+            flex-direction: column;  /* Arrange content in a column */
+            background: rgba(0, 0, 0, 0.8);  /* Keep dark background */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end; /* Push everything to the bottom */
+        }
+
+        /* Adjust input field size when in full-screen mode */
+        #chatBox.fullScreen #chatInput {
+            width: 100%;        /* Take full width of the screen */
+            padding: 15px;      /* Increase padding for better usability */
+            font-size: 18px;    /* Increase font size for readability */
+            margin-top: 20px;   /* Add margin for spacing */
+            min-height: 15vh;
+        }
+
+        /* Make chat log occupy available space in full screen */
+        #chatBox.fullScreen #chatLog { 
+            max-height: 90%; 
+            overflow-y: auto; 
+            margin-bottom: 10px; 
+        }
+
+        /* Container for Send and Zoom buttons */
+        #buttonContainer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            width: 100%; /* Ensure the button container takes up the full width */
+        }
+
+        /* Make buttons smaller and fit in one line */
+        #zoomButton, #sendButton {
+            width: 48%; /* Make buttons take up less width so they fit on the same line */
+            padding: 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-sizing: border-box;  /* Include padding in width calculation */
+        }
+
+        /* Make buttons smaller and fit in one line */
+        #chatBox.fullScreen #zoomButton, #sendButton {
+            width: 48%; /* Make buttons take up less width so they fit on the same line */
+            padding: 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        #sendButton {
+            background-color: #60b8d8;
+            color: white;
+        }
+
+        #sendButton:hover {
+            background-color: #4583a0;
+        }
+
+        /* Disabled button styling */
+        #sendButton:disabled {
+            background-color: #cccccc;  /* Lighter/darker gray for disabled state */
+            cursor: not-allowed;        /* Change cursor to show that the button is not clickable */
+        }
+
+        #zoomButton {
+            background-color: #60b8d8;
+            color: white;
+        }
+
+        #zoomButton:hover {
+            background-color: #4583a0;
+        }
+
+        /* Other chat styling */
+        #chatLog { 
+            max-height: 200px; 
+            overflow-y: auto; 
+            margin-bottom: 10px; 
+        }
+        .chatMessage { margin: 5px 0; }
+        .userMessage { color: #60b8d8; font-size: 18px; }
+        .botMessage { color: #ffffff; font-size: 18px; }
+        #chatInput { 
+            font-family: Arial, sans-serif;
+            resize: none; /* Disable resizing */ 
+            width: 100%; /* Ensure it takes full width */
+            padding: 10px; 
+            font-size: 18px; 
+            background: #333; 
+            color: white; 
+            border: none; 
+            border-radius: 5px;
+            box-sizing: border-box; /* Include padding in width calculation */
+        }
+
+        /* Media Queries for smaller devices */
+        @media (max-width: 768px) { 
+            #chatBox { 
+                width: 100%; 
+                padding: 15px; 
+            }
+
+            #chatBox.fullScreen #chatInput {
+                width: 100%;  /* Take full width of the screen */
+            }
+
+            #chatInput {
+                width: 100%;  /* Ensure input is fully responsive on smaller screens */
+            }
+            
+            #chatLog { 
+                max-height: 150px; 
+            } 
+        }
+
+        @media (max-width: 480px) { 
+            #chatBox { 
+                width: 100%; 
+                padding: 10px; 
+            }
+
+            #chatBox.fullScreen #chatInput {
+                width: 100%;  /* Ensure input is fully responsive on small screens */
+            }
+
+            #chatInput {
+                width: 100%;  /* Even smaller width for mobile screens */
+            }
+
+            #chatLog { 
+                max-height: 120px; 
+            }
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <!-- Chat Interface -->
+    <div id="chatBox">
+        <div id="chatLog"></div>
+        <textarea id="chatInput" placeholder="Ask me anything..."></textarea>
+        <div id="buttonContainer">
+            <button id="zoomButton" class="clickable">Full Screen</button>
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // Zoom button functionality
+        const chatBox = document.getElementById('chatBox');
+        const zoomButton = document.getElementById('zoomButton');
+
+        zoomButton.addEventListener('click', toggleFullScreen);
+
+        function toggleFullScreen() {
+            if (chatBox.classList.contains('fullScreen')) {
+                chatBox.classList.remove('fullScreen');
+                zoomButton.textContent = 'Full Screen'; // Change button text
+            } else {
+                chatBox.classList.add('fullScreen');
+                zoomButton.textContent = 'Exit Full Screen'; // Change button text
+            }
+        }
+        let scene, camera, renderer, icosahedron, particlesMesh, ring, mouseX = 0, mouseY = 0;
+        let isSceneOne = true;
+        let lastCameraZ = 5;
+        let audio = new Audio('roomofmark.m4a');  // Replace with the actual audio path
+        let isMobile = window.matchMedia("(max-width: 768px)").matches || ('ontouchstart' in window); // Detect mobile devices
+        let deviceOrientationData = { alpha: 0, beta: 0, gamma: 0 }; // Store gyroscope data
+        let permissionRequested = false;
+
+        // Set up the scene and background
+        function setupSceneOne() {
+            scene = new THREE.Scene();
+            addGradientBackground();
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = lastCameraZ;
+
+            if (!renderer) {
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.precision = 'highp';
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+            }
+
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            // Icosahedron setup
+            const geometry = new THREE.IcosahedronGeometry(1, 0);
+            const oceanMaterial = new THREE.MeshStandardMaterial({
+                color: 0x00A9E0,
+                metalness: 0.7,
+                roughness: 0.25,
+                emissive: 0x00A9E0,
+                emissiveIntensity: 0.4,
+                transparent: true,
+                opacity: 0.9
+            });
+
+            icosahedron = new THREE.Mesh(geometry, oceanMaterial);
+            scene.add(icosahedron);
+
+            // Floating particles setup
+            const particlesGeometry = new THREE.BufferGeometry();
+            const particleCount = 3587;
+            const posArray = new Float32Array(particleCount * 3);
+            for (let i = 0; i < particleCount * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 100;
+            }
+            particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particlesMaterial = new THREE.PointsMaterial({
+                size: 0.08,
+                color: 0x7fffd4,
+                opacity: 0.9,
+                transparent: true,
+                blending: THREE.AdditiveBlending
+            });
+
+            particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+            scene.add(particlesMesh);
+
+            // Ring setup
+            const ringGeometry = new THREE.TorusGeometry(2, 0.02, 16, 100);
+            const ringMaterial = new THREE.MeshPhysicalMaterial({
+                color: 0x00A9E0,
+                metalness: 1,
+                roughness: 0.05,
+                emissive: 0x00A9E0,
+                emissiveIntensity: 0.2
+            });
+
+            ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.rotation.x = Math.PI / 2;
+        }
+
+        // Scene Two Setup (for toggling scenes)
+        function setupSceneTwo() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            const geometry = new THREE.IcosahedronGeometry(1, 0);
+            const material = new THREE.MeshPhongMaterial({
+                color: 0x000000,
+                shininess: 100
+            });
+
+            icosahedron = new THREE.Mesh(geometry, material);
+            scene.add(icosahedron);
+
+            const particlesGeometry = new THREE.BufferGeometry();
+            const particleCount = 277;
+            const posArray = new Float32Array(particleCount * 3);
+            for (let i = 0; i < particleCount * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 10;
+            }
+            particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particlesMaterial = new THREE.PointsMaterial({
+                size: 0.05,
+                color: 0xff88ff
+            });
+
+            particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+            scene.add(particlesMesh);
+
+            const ringGeometry = new THREE.TorusGeometry(2, 0.02, 16, 100);
+            const ringMaterial = new THREE.MeshPhongMaterial({
+                color: 0x000000,
+                emissive: 0x000000,
+                emissiveIntensity: 0.2,
+                shininess: 100
+            });
+
+            ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.rotation.x = Math.PI / 2;
+            scene.add(ring);
+        }
+
+        // Full-screen Gradient Background Setup
+        function addGradientBackground() {
+            const geometry = new THREE.SphereGeometry(100, 32, 32);
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    topColor: { type: 'c', value: new THREE.Color(0xFF7F50) },
+                    bottomColor: { type: 'c', value: new THREE.Color(0x1a1a1a) },
+                    offset: { type: 'f', value: 33 },
+                    exponent: { type: 'f', value: 0.6 }
+                },
+                vertexShader: `
+                    varying vec3 vPos;
+                    void main() {
+                        vPos = position;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 topColor;
+                    uniform vec3 bottomColor;
+                    uniform float offset;
+                    uniform float exponent;
+                    varying vec3 vPos;
+                    void main() {
+                        float h = normalize(vPos).y;
+                        gl_FragColor = vec4(mix(bottomColor, topColor, pow(0.5 - h, exponent)), 1.0);
+                    }
+                `,
+                side: THREE.BackSide
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+        }
+
+        // Window resize handling
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Handle mouse movements
+        document.addEventListener('mousemove', (event) => {
+            mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+            mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Update the cursor to 'pointer' when hovering over the icosahedron
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(icosahedron);
+
+            if (intersects.length > 0) {
+                // Change cursor to pointer (hand) when hovering over the icosahedron
+                document.body.style.cursor = 'pointer';
+            } else {
+                // Reset the cursor to default if not hovering over the icosahedron
+                document.body.style.cursor = 'auto';
+            }
+        });
+
+        // Mouse click to toggle scene
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        document.addEventListener('click', onMouseClick, false);
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(icosahedron);
+
+            if (intersects.length > 0) {
+                toggleScene();
+            }
+        }
+
+        // Zoom handling
+        let zoomSpeed = 0.1;
+        document.addEventListener('wheel', onWheel, false);
+        function onWheel(event) {
+            event.preventDefault();
+            camera.position.z += event.deltaY * zoomSpeed * 0.01;
+            camera.position.z = Math.max(Math.min(camera.position.z, 20), 2);
+            lastCameraZ = camera.position.z;
+        }
+
+        // Scene toggling
+        function toggleScene() {
+            scene.clear();
+            if (isSceneOne) {
+                setupSceneTwo();
+            } else {
+                setupSceneOne();
+            }
+            audio.play();
+            isSceneOne = !isSceneOne;
+        }
+
+        // Simple chatbox interaction
+        document.getElementById('sendButton').addEventListener('click', sendMessage);
+        let conversationHistory = []; // Array to store chat history
+
+        document.getElementById('chatInput').addEventListener('keydown', function(event) {
+            const sendButton = document.getElementById('sendButton');
+            const input = document.getElementById('chatInput');
+
+            // If Enter is pressed and the Send button is disabled, prevent message send
+            if (event.key === 'Enter' && !event.shiftKey) {
+                if (sendButton.disabled) {
+                    event.preventDefault(); // Prevent sending the message
+                    return;
+                }
+                event.preventDefault(); // Prevent the default Enter behavior (which is to add a newline)
+                sendMessage();
+            }
+        });
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const chatLog = document.getElementById('chatLog');
+            const sendButton = document.getElementById('sendButton');
+            const userMessage = input.value.trim();
+
+            if (userMessage) {
+                sendButton.disabled = true;
+                // Display user message immediately
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('chatMessage', 'userMessage');
+                messageElement.innerHTML = 'You: ' + userMessage.replace(/\n/g, '<br/>'); // Preserve text formatting
+                chatLog.appendChild(messageElement);
+                input.value = ''; // Clear input field
+
+                // Add user message to the conversation history
+                conversationHistory.push({ role: 'user', content: userMessage });
+                chatLog.scrollTop = chatLog.scrollHeight; // Scroll to the bottom
+
+                // Show the typing animation after 200ms delay if the response isn't ready yet
+                let typingTimeout;
+                let typingAnimationInterval;
+                let botMessageElement;
+                const typingAnimationPromise = new Promise((resolve) => {
+                    const randomDelayAnimation = Math.floor(Math.random() * (600 - 300 + 1)) + 300;
+                    typingTimeout = setTimeout(() => {
+                        // Display "Otto: Typing..." if the response is not processed within 200ms
+                        botMessageElement = document.createElement('div');
+                        botMessageElement.classList.add('chatMessage', 'botMessage');
+                        botMessageElement.innerHTML = 'Otto: Typing.';
+                        chatLog.appendChild(botMessageElement);
+                        chatLog.scrollTop = chatLog.scrollHeight; // Scroll to the bottom
+
+                        // Start the dot animation loop
+                        let dotCount = 0;
+                        typingAnimationInterval = setInterval(() => {
+                            dotCount = (dotCount + 1) % 4; // Loop through 0, 1, 2, 3
+                            botMessageElement.innerHTML = 'Otto: Typing' + '.'.repeat(dotCount);
+                        }, 500); // Update every 500ms
+
+                        // Store the interval and resolve the promise to indicate typing animation started
+                        botMessageElement.dotInterval = typingAnimationInterval;
+                        resolve(botMessageElement);
+                    }, randomDelayAnimation); // Wait 300-600ms before showing typing animation
+                });
+
+                // Send the chat history to the backend API
+                try {
+	   const response = await fetch('http://localhost:11434/api/generate', {
+  	       method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                                model: 'llama3.1:8',  // 替换为你的模型名称
+                                prompt: document.getElementById('chatInput').value.trim(), // 直接发送用户输入
+                        }),
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        // If response is ready before 200ms, cancel the typing animation timeout
+                        clearTimeout(typingTimeout); // Cancel typing animation timeout
+                        clearInterval(typingAnimationInterval); // Clear the interval for typing animation
+                        const botMessageElement = await typingAnimationPromise; // Wait for typing animation if it was triggered
+
+                        // Remove the "Typing..." and start displaying the real response
+                        botMessageElement.innerHTML = 'Otto: '; // Remove "Typing..."
+                        await typeBotResponse(data.reply.replace(/\n/g, '<br/>'), botMessageElement); // Pass the same element to continue
+
+                        // Add bot response to the conversation history
+                        conversationHistory.push({ role: 'assistant', content: data.reply });
+                        chatLog.scrollTop = chatLog.scrollHeight; // Scroll to the bottom
+                    } else {
+                        // Handle failed response (e.g., too many requests)
+                        clearTimeout(typingTimeout); // Cancel typing animation timeout
+                        clearInterval(typingAnimationInterval); // Clear the interval for typing animation
+                        const botMessageElement = await typingAnimationPromise; // Wait for typing animation if it was triggered
+
+                        // Add the fallback message to the history and clear the animation
+                        botMessageElement.innerHTML = 'Otto: ';
+                        const errorMessage = 'I need a moment to chill out! Too many requests are coming through right now. Please try again later...';
+                        await typeBotResponse(errorMessage, botMessageElement); // Pass the same element to continue
+
+                        // Add the error response to the conversation history
+                        conversationHistory.push({ role: 'assistant', content: errorMessage });
+                        chatLog.scrollTop = chatLog.scrollHeight; // Scroll to the bottom
+                    }
+                } catch (error) {
+                    console.error(error);
+                    // Handle error, such as network failure
+                    clearTimeout(typingTimeout); // Cancel typing animation timeout
+                    clearInterval(typingAnimationInterval); // Clear the interval for typing animation
+                    const botMessageElement = await typingAnimationPromise; // Wait for typing animation if it was triggered
+
+                    // Add the fallback message to the history and clear the animation
+                    botMessageElement.innerHTML = 'Otto: ';
+                    const errorMessage = 'I need a moment to chill out! Too many requests are coming through right now. Please try again later...';
+                    await typeBotResponse(errorMessage, botMessageElement); // Pass the same element to continue
+
+                    // Add the error response to the conversation history
+                    conversationHistory.push({ role: 'assistant', content: errorMessage });
+                    chatLog.scrollTop = chatLog.scrollHeight; // Scroll to the bottom
+                } finally {
+                    sendButton.disabled = false;
+                }
+            }
+        }
+
+        // Function to process and display Markdown
+        async function typeBotResponse(response, botMessageElement) {
+            let i = 0;
+            const chatLog = document.getElementById('chatLog');
+
+            while (i < response.length) {
+                const partialResponse = response.substring(0, i + 1);
+                const formattedResponse = marked.parse(partialResponse); // Convert to HTML using marked.js
+                botMessageElement.innerHTML = 'Otto: ' + formattedResponse;
+                chatLog.scrollTop = chatLog.scrollHeight; // Scroll to bottom
+                i++;
+
+                const randomDelay = Math.floor(Math.random() * 7);
+                await new Promise(resolve => setTimeout(resolve, randomDelay));
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            document.addEventListener('click', async () => {
+
+                if (permissionRequested) return;
+
+                if (isMobile && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    try {
+                        const permission = await DeviceOrientationEvent.requestPermission();
+                        if (permission === 'granted') {
+                            console.log('Permission granted for Device Orientation');
+                            alert('You can start rotating your phone now')
+
+                            window.addEventListener('deviceorientation', handleDeviceOrientation);
+                        } else {
+                            console.log('Permission denied for Device Orientation');
+                            alert('You need to grant permission for device orientation to work');
+                        }
+                        permissionRequested = true;
+                    } catch (err) {
+                        console.error('Permission request failed', err);
+                        alert('Failed to request permission for device orientation. Error: ' + (err.message || err));
+                    }
+                }
+                if (isMobile && !permissionRequested) {
+                    try {
+                        console.log('Permission granted for Device Orientation');
+                        alert('You can start rotating your phone now')
+                        window.addEventListener('deviceorientation', handleDeviceOrientation);
+                        permissionRequested = true;
+                    } catch (err) {
+                        console.error('Permission request failed', err);
+                        alert('Failed to request permission for device orientation. Error: ' + (err.message || err));
+                    }
+                }
+            });
+        });
+
+        // The actual device orientation handler
+        function handleDeviceOrientation(event) {
+            deviceOrientationData.alpha = event.alpha || 0;  // Rotation around Z-axis
+            deviceOrientationData.beta = event.beta || 0;    // Rotation around X-axis
+            deviceOrientationData.gamma = event.gamma || 0;  // Rotation around Y-axis
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            if (icosahedron) {
+                icosahedron.rotation.x += 0.01;
+                icosahedron.rotation.y += 0.01;
+            }
+            if (particlesMesh) {
+                particlesMesh.rotation.y += 0.002;
+            }
+
+            // Apply gyroscope data to camera rotation
+            if (isMobile) {
+                camera.position.y = -THREE.MathUtils.degToRad(deviceOrientationData.beta * 1);  // Adjust sensitivity here
+                camera.position.x = THREE.MathUtils.degToRad(deviceOrientationData.gamma * 1);
+                
+            }
+
+            camera.position.x += (mouseX * 5 - camera.position.x) * 0.05;
+            camera.position.y += (mouseY * 5 - camera.position.y) * 0.05;
+            camera.lookAt(scene.position);
+
+            renderer.render(scene, camera);
+        }
+
+        setupSceneOne();
+        animate();
+    </script>
+</body>
+</html>
